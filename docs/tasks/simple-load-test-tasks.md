@@ -36,7 +36,7 @@
 - **依存タスク**: TASK-001
 - **実装詳細**:
   - PostgreSQL Dockerコンテナ設定
-  - simple-database.sqlの実行
+  - database-schema.sqlの実行
   - データベース接続設定
   - マイグレーション機能（シンプル）
 - **テスト要件**:
@@ -47,24 +47,28 @@
   - [ ] 3テーブル（load_requests, pod_metrics, sessions）が存在
   - [ ] JSON型が使用されていない（正規化確認）
 
-#### TASK-003: Kubernetes開発環境
+#### TASK-003: GKE開発環境
 
 - [ ] **タスク完了**
 - **タスクタイプ**: DIRECT
-- **要件リンク**: REQ-401, REQ-402
+- **要件リンク**: REQ-401, REQ-402, REQ-405, REQ-406
 - **依存タスク**: TASK-001
 - **実装詳細**:
-  - Minikube/Kind設定
+  - GKE Autopilotクラスター作成
+  - Workload Identity設定
   - 負荷対象Deployment作成（nginx）
   - HPA設定ファイル作成
   - ServiceAccount/RBAC設定
+  - Artifact Registry設定
 - **テスト要件**:
-  - [ ] ローカルK8sクラスター起動
+  - [ ] GKEクラスター接続確認
   - [ ] 負荷対象Podが起動
   - [ ] HPAが設定される
+  - [ ] Workload Identityが有効
 - **完了条件**:
   - [ ] `kubectl get pods`でPodが確認できる
   - [ ] HPAが動作可能な状態
+  - [ ] Workload Identityが設定済み
 
 ### フェーズ2: バックエンド実装（推定：16時間）
 
@@ -92,29 +96,34 @@
   - [ ] データベースに接続できる
   - [ ] CORSが設定されている
 
-#### TASK-102: Kubernetes API統合
+#### TASK-102: GKE API統合
 
 - [ ] **タスク完了**
 - **タスクタイプ**: TDD
-- **要件リンク**: REQ-003, REQ-004
+- **要件リンク**: REQ-003, REQ-004, REQ-405
 - **依存タスク**: TASK-101, TASK-003
 - **実装詳細**:
   - **TypeScript版**: @kubernetes/client-node設定
   - **Python版**: kubernetes-python設定
+  - Workload Identity認証設定
   - Pod数取得機能
   - CPU/メモリ使用率取得
   - スケーリング状態監視
+  - GKE固有メトリクス取得
 - **テスト要件**:
-  - [ ] 単体テスト: K8s API呼び出し（モック）
-  - [ ] 統合テスト: 実際のK8s API連携
+  - [ ] 単体テスト: GKE API呼び出し（モック）
+  - [ ] 統合テスト: 実際のGKE API連携
+  - [ ] Workload Identity認証テスト
   - [ ] エラーハンドリングテスト
 - **エラーハンドリング**:
-  - [ ] K8s API接続失敗
+  - [ ] GKE API接続失敗
+  - [ ] Workload Identity認証エラー
   - [ ] 権限不足エラー
   - [ ] タイムアウト処理
 - **完了条件**:
   - [ ] Pod数を取得できる
   - [ ] CPU使用率を取得できる
+  - [ ] Workload Identity経由で認証
   - [ ] 適切なエラーハンドリング
 
 #### TASK-103: 負荷生成API実装
@@ -159,7 +168,7 @@
   - [ ] 統合テスト: K8s API → DB保存
   - [ ] キャッシュ動作確認
 - **エラーハンドリング**:
-  - [ ] K8s API呼び出し失敗時の処理
+  - [ ] GKE API呼び出し失敗時の処理
   - [ ] データベース保存エラー
 - **完了条件**:
   - [ ] リアルタイムPod数取得
@@ -266,7 +275,7 @@
   - [ ] モバイルで操作できる
   - [ ] パフォーマンスが良好
 
-### フェーズ4: Kubernetes統合（推定：8時間）
+### フェーズ4: GKE統合（推定：8時間）
 
 #### TASK-301: Dockerイメージ作成
 
@@ -280,34 +289,41 @@
   - .dockerignore設定
   - イメージサイズ最適化
   - ヘルスチェック設定
+  - Artifact Registry用タグ設定
 - **テスト要件**:
   - [ ] イメージビルド成功
   - [ ] コンテナ起動確認
   - [ ] ヘルスチェック動作確認
+  - [ ] Artifact Registryへのプッシュ確認
 - **完了条件**:
   - [ ] フロントエンド・バックエンドイメージが作成される
   - [ ] イメージサイズが適切
   - [ ] セキュリティスキャン合格
+  - [ ] Artifact Registryにイメージが保存される
 
-#### TASK-302: Kubernetesマニフェスト作成
+#### TASK-302: GKEマニフェスト作成
 
 - [ ] **タスク完了**
 - **タスクタイプ**: DIRECT
-- **要件リンク**: REQ-401, REQ-402
+- **要件リンク**: REQ-401, REQ-402, REQ-405, REQ-406
 - **依存タスク**: TASK-301
 - **実装詳細**:
-  - アプリケーションDeployment YAML
+  - アプリケーションDeployment YAML（Autopilot対応）
   - Service YAML
   - ConfigMap YAML（設定値）
   - Secret YAML（DB接続情報）
-  - Ingress YAML（シンプル）
+  - Ingress YAML（Google Cloud Load Balancer）
+  - ServiceAccount YAML（Workload Identity）
+  - BackendConfig YAML（ヘルスチェック設定）
 - **テスト要件**:
   - [ ] YAML検証（kubeval/kustomize）
-  - [ ] デプロイテスト
-  - [ ] 外部アクセステスト
+  - [ ] GKEへのデプロイテスト
+  - [ ] Load Balancer経由のアクセステスト
+  - [ ] Workload Identity動作確認
 - **完了条件**:
-  - [ ] アプリケーションがデプロイできる
-  - [ ] 外部からアクセスできる
+  - [ ] アプリケーションがGKEにデプロイできる
+  - [ ] Load Balancer経由でHTTPSアクセスできる
+  - [ ] Workload Identityで認証できる
   - [ ] 設定が正しく読み込まれる
 
 #### TASK-303: 統合テスト・動作確認
@@ -384,7 +400,7 @@ gantt
     section フェーズ1:基盤
     TASK-001 環境設定     :a1, 2024-01-01, 1d
     TASK-002 DB設定       :a2, after a1, 1d
-    TASK-003 K8s設定      :a3, after a1, 1d
+    TASK-003 GKE設定      :a3, after a1, 1d
     
     section フェーズ2:Backend
     TASK-101 基本実装     :b1, after a2, 1d
@@ -398,9 +414,9 @@ gantt
     TASK-203 API統合      :c3, after c2 b3 b4, 1d
     TASK-204 UI改善       :c4, after c3, 1d
     
-    section フェーズ4:K8s統合
+    section フェーズ4:GKE統合
     TASK-301 Docker       :d1, after b4 c4, 1d
-    TASK-302 K8s YAML     :d2, after d1, 1d
+    TASK-302 GKE YAML     :d2, after d1, 1d
     TASK-303 統合テスト   :d3, after d2, 1d
     
     section フェーズ5:完了
@@ -431,16 +447,17 @@ gantt
 
 2. **M2: バックエンドAPI完成**（6日目）
    - 全APIエンドポイント実装完了
-   - K8s API連携が動作
+   - GKE API連携が動作
 
 3. **M3: フロントエンド完成**（9日目）
    - UI実装完了
    - API統合完了
    - ローカル環境で全機能動作
 
-4. **M4: Kubernetes統合完了**（12日目）
+4. **M4: GKE統合完了**（12日目）
    - コンテナ化完了
-   - K8s環境でのデプロイ成功
+   - GKE環境でのデプロイ成功
+   - Workload Identity設定完了
 
 5. **M5: リリース準備完了**（15日目）
    - 全テスト合格
