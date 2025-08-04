@@ -11,7 +11,7 @@ services:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../docs/design/simple-load-test/simple-database.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-loadtest}"]
       interval: 5s
