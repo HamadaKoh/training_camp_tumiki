@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -23,5 +23,15 @@ export async function testDatabaseConnection(): Promise<void> {
   } catch (error) {
     console.error('Database connection failed:', error);
     throw error;
+  }
+}
+
+export async function initializeDatabase(): Promise<void> {
+  try {
+    await testDatabaseConnection();
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    // Don't throw - app can work without DB
   }
 }
