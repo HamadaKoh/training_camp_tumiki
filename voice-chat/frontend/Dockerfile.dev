@@ -2,11 +2,16 @@ FROM node:18
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install build dependencies for native modules
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm ci
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Clean install dependencies with platform-specific rebuild
+RUN npm config set strict-ssl false
+RUN npm config set registry "http://registry.npmjs.org/"
+RUN npm install
 
 # Copy application files
 COPY . .

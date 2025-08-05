@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { App } from './app';
+import { createApp, createServer } from './app';
 import { initializeDatabase } from './config/database';
 
 // Load environment variables
@@ -7,32 +7,40 @@ config();
 
 // Configuration
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const CORS_ORIGINS = process.env.CORS_ORIGINS?.split(',') || [
-  'http://localhost:5173',
-  'http://localhost:3000',
-];
-
-// Create and start the application
-const appConfig = {
-  port: PORT,
-  corsOrigins: CORS_ORIGINS,
-};
 
 // Initialize database first
 initializeDatabase().then(() => {
-  const app = new App(appConfig);
-  app.start();
+  // Create Express app
+  const app = createApp();
+  
+  // Create HTTP and Socket.IO servers
+  const { httpServer, socketIOServer } = createServer(app);
+  
+  // Start the server
+  httpServer.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 
-  // Store app instance for graceful shutdown
+  // Store server instance for graceful shutdown
   process.on('SIGTERM', async () => {
     console.log('SIGTERM signal received: closing HTTP server');
-    await app.stop();
-    process.exit(0);
+    httpServer.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
+    socketIOServer.close(() => {
+      console.log('Socket.IO server closed');
+    });
   });
 
   process.on('SIGINT', async () => {
     console.log('SIGINT signal received: closing HTTP server');
-    await app.stop();
-    process.exit(0);
+    httpServer.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
+    socketIOServer.close(() => {
+      console.log('Socket.IO server closed');
+    });
   });
 });

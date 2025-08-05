@@ -61,13 +61,15 @@ services:
     ports:
       - '${FRONTEND_PORT:-5173}:5173'
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
     networks:
       - voice-chat-network
     depends_on:
       - backend
-    command: npm run dev -- --host 0.0.0.0
 
 networks:
   voice-chat-network:
