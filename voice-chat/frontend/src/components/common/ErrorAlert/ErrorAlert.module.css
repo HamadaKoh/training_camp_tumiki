@@ -1,0 +1,22 @@
+.error-alert {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c66;
+  padding: 16px;
+  border-radius: 4px;
+  margin: 16px 0;
+}
+
+.error-alert button {
+  background-color: #c66;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.error-alert button:hover {
+  background-color: #a44;
+}
