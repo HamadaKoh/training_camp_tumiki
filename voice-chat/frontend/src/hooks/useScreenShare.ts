@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWebRTC } from './useWebRTC';
-import { useAudioControls } from './useAudioControls';
 import { useSocketConnection } from './useSocketConnection';
 
 export interface UseScreenShareReturn {
@@ -17,12 +16,12 @@ export interface UseScreenShareReturn {
 }
 
 // Generate a simple user ID for demo purposes
-const getCurrentUserId = () => 'current-user-' + Math.random().toString(36).substr(2, 9);
+const getCurrentUserId = () => 'current-user-' + Math.random().toString(36).substring(2, 11);
 
 export const useScreenShare = (): UseScreenShareReturn => {
   const { peers, localStream } = useWebRTC();
-  const {} = useAudioControls(); // Included for integration
-  const { socket } = useSocketConnection();
+  const { connectionState } = useSocketConnection();
+  const socket = connectionState.socket;
 
   const [isSharing, setIsSharing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -193,7 +192,7 @@ export const useScreenShare = (): UseScreenShareReturn => {
       setIsLoading(false);
       operationInProgressRef.current = false;
     }
-  }, [isLoading, sharingUserId, storeOriginalVideoTracks, replaceVideoTracks, socket]);
+  }, [isLoading, sharingUserId, isSharing, storeOriginalVideoTracks, replaceVideoTracks, socket]);
 
   const stopScreenShare = useCallback(async (): Promise<void> => {
     if (!isSharing || !screenStream || operationInProgressRef.current) return;

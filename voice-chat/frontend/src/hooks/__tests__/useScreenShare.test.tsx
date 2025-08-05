@@ -77,18 +77,35 @@ const mockUseAudioControls = {
 
 // Mock useSocketConnection
 const mockUseSocketConnection = {
-  socket: mockSocket,
-  isConnected: true,
-  error: null,
+  connectionState: {
+    isConnected: true,
+    isConnecting: false,
+    error: null,
+    socket: mockSocket,
+    reconnectAttempts: 0,
+  },
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  emit: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
 };
 
 beforeEach(() => {
-  global.navigator.mediaDevices = {
-    getDisplayMedia: mockGetDisplayMedia,
-  } as any;
+  Object.defineProperty(globalThis, 'navigator', {
+    value: {
+      mediaDevices: {
+        getDisplayMedia: mockGetDisplayMedia,
+      },
+    },
+    writable: true,
+  });
 
   vi.clearAllMocks();
   mockVideoTrack.onended = null;
+
+  // Mock console.error to suppress expected error messages
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 // Mock the hooks
@@ -107,6 +124,7 @@ vi.mock('../useSocketConnection', () => ({
 describe('useScreenShare', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('Hook Initialization', () => {
@@ -264,10 +282,12 @@ describe('useScreenShare', () => {
         resolvePromise = resolve;
       });
 
-      mockGetDisplayMedia.mockImplementation(() => delayedPromise);
+      mockGetDisplayMedia.mockImplementation(
+        () => delayedPromise as unknown as Promise<typeof mockScreenStream>
+      );
 
       act(() => {
-        result.current.startScreenShare();
+        void result.current.startScreenShare();
       });
 
       // Should be loading
@@ -275,7 +295,7 @@ describe('useScreenShare', () => {
 
       // Complete the operation
       await act(async () => {
-        resolvePromise(mockScreenStream);
+        resolvePromise(mockScreenStream as unknown as MediaStream);
         await delayedPromise;
       });
 
@@ -364,8 +384,11 @@ describe('useScreenShare', () => {
 
       // Simulate browser UI stop
       await act(async () => {
-        if (mockVideoTrack.onended) {
-          mockVideoTrack.onended({} as Event);
+        const track = mockVideoTrack as unknown as MediaStreamTrack & {
+          onended: ((this: MediaStreamTrack, ev: Event) => unknown) | null;
+        };
+        if (track.onended) {
+          track.onended({} as Event);
         }
       });
 
@@ -554,8 +577,15 @@ describe('useScreenShare', () => {
 
     it('should handle getDisplayMedia API unavailable', async () => {
       // ERROR-002: getDisplayMedia API未対応
-      const originalGetDisplayMedia = global.navigator.mediaDevices.getDisplayMedia;
-      global.navigator.mediaDevices.getDisplayMedia = undefined as any;
+      const originalGetDisplayMedia = (
+        globalThis as typeof globalThis & {
+          navigator: { mediaDevices: { getDisplayMedia: typeof mockGetDisplayMedia } };
+        }
+      ).navigator.mediaDevices.getDisplayMedia;
+      Object.defineProperty(globalThis.navigator.mediaDevices, 'getDisplayMedia', {
+        value: undefined,
+        writable: true,
+      });
 
       const { result } = renderHook(() => useScreenShare());
 
@@ -566,7 +596,10 @@ describe('useScreenShare', () => {
       expect(result.current.isSharing).toBe(false);
 
       // Restore original mock
-      global.navigator.mediaDevices.getDisplayMedia = originalGetDisplayMedia;
+      Object.defineProperty(globalThis.navigator.mediaDevices, 'getDisplayMedia', {
+        value: originalGetDisplayMedia,
+        writable: true,
+      });
     });
 
     it('should handle WebRTC not initialized error', async () => {
