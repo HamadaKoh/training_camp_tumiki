@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(/tdd-cycle-full.sh:*)",
+      "Bash(find:*)",
+      "Bash(/home/kou_hamada/training_camp_tumiki/.claude/commands/tdd-cycle-full.sh:*)",
+      "Bash(chmod:*)",
+      "Bash(npm install:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(docker-compose:*)",
+      "Bash(ls:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run test:coverage:*)",
+      "Bash(npm run lint:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }
