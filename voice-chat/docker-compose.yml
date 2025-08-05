@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: voice-chat-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-voice_chat_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-voice_chat_pass}
+      POSTGRES_DB: ${DB_NAME:-voice_chat_db}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - voice-chat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-voice_chat_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: voice-chat-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${BACKEND_PORT:-3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-voice_chat_user}
+      DB_PASSWORD: ${DB_PASSWORD:-voice_chat_pass}
+      DB_NAME: ${DB_NAME:-voice_chat_db}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    ports:
+      - '${BACKEND_PORT:-3000}:3000'
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - voice-chat-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: voice-chat-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3000}
+    ports:
+      - '${FRONTEND_PORT:-5173}:5173'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - voice-chat-network
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+networks:
+  voice-chat-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
