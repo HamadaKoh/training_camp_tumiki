@@ -1,0 +1,1 @@
+console.log('Voice Chat Frontend Application');
