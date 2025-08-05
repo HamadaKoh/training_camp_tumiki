@@ -3,12 +3,14 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install dependencies for native modules
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache --no-check-certificate python3 make g++
 
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
+RUN npm config set strict-ssl false
+RUN npm config set registry "http://registry.npmjs.org/"
 RUN npm install
 
 # Copy source code (in production, we'd copy everything)
