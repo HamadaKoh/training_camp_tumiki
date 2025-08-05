@@ -40,6 +40,12 @@
   outline-offset: 2px;
 }
 
+.connection-status-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

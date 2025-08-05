@@ -1,74 +1,67 @@
-import { useState } from 'react';
+import { RoomProvider, useRoom } from './context';
 import { RoomView } from './components/RoomView';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { ErrorAlert } from './components/common/ErrorAlert';
-import { Participant } from './types';
+import { ConnectionStatus } from './components/common/ConnectionStatus';
+import { ReconnectionNotification } from './components/common/ReconnectionNotification';
 import './App.css';
 
-function App() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-
-  const currentUser: Participant = {
-    id: 'current-user',
-    name: 'あなた',
-    isMuted: false,
-    isScreenSharing: false,
-    joinedAt: new Date()
-  };
-
-  const handleLeaveRoom = () => {
-    console.log('Leaving room...');
-    // TODO: Socket.IO実装時に接続終了処理を追加
-  };
+const AppContent = () => {
+  const { state, actions } = useRoom();
 
   const handleJoinRoom = () => {
-    setLoading(true);
-    // TODO: Socket.IO接続処理
-    setTimeout(() => {
-      setIsConnected(true);
-      setLoading(false);
-      setParticipants([currentUser]);
-    }, 1000);
+    actions.joinRoom('default-room', 'あなた');
   };
 
-  if (loading) {
+  if (state.isConnecting) {
     return <LoadingSpinner message="ルームに接続中..." />;
   }
 
-  if (error) {
+  if (state.error && !state.isConnected && !state.isConnecting) {
     return (
       <ErrorAlert 
-        message={error} 
+        message={state.error} 
         onRetry={() => {
-          setError('');
+          actions.clearError();
           handleJoinRoom();
         }} 
       />
     );
   }
 
-  if (!isConnected) {
+  if (!state.isConnected && !state.isConnecting) {
     return (
       <div className="app-welcome">
         <h1>Voice Chat</h1>
         <button onClick={handleJoinRoom} className="join-button">
           ルームに参加
         </button>
+        <div className="connection-status-container">
+          <ConnectionStatus />
+        </div>
       </div>
     );
   }
 
   return (
-    <RoomView
-      roomId="default-room"
-      isConnected={isConnected}
-      participants={participants}
-      currentUser={currentUser}
-      onLeaveRoom={handleLeaveRoom}
-    />
+    <>
+      <RoomView
+        roomId={state.roomId || 'default-room'}
+        isConnected={state.isConnected}
+        participants={state.participants}
+        currentUser={state.currentUser || undefined}
+        onLeaveRoom={actions.leaveRoom}
+      />
+      <ReconnectionNotification />
+    </>
+  );
+};
+
+function App() {
+  return (
+    <RoomProvider>
+      <AppContent />
+    </RoomProvider>
   );
 }
 
