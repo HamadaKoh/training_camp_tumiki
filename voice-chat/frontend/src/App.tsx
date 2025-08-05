@@ -19,12 +19,12 @@ const AppContent = () => {
 
   if (state.error && !state.isConnected && !state.isConnecting) {
     return (
-      <ErrorAlert 
-        message={state.error} 
+      <ErrorAlert
+        message={state.error}
         onRetry={() => {
           actions.clearError();
           handleJoinRoom();
-        }} 
+        }}
       />
     );
   }
