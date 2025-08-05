@@ -122,36 +122,19 @@ export function createServer(app: express.Application): {
     },
   });
 
-  // 【接続認証ミドルウェア】: 接続数制限をミドルウェアレベルで実装
-  // 【テスト対応】: 11番目の接続で connect_error を発生させるための実装
-  // 【改善内容】: ConnectionManagerによる詳細な接続管理
-  socketIOServer.use((_socket, next) => {
-    // 【接続数制限チェック】: ConnectionManagerによる事前チェック
-    if (!connectionManager.canAcceptConnection()) {
-      // 【接続拒否】: connect_error イベントを発生させる
-      const error = new Error('Maximum connections exceeded');
-      (error as Error & { type?: string }).type = 'connection_limit';
-      next(error); // 【エラー返却】: 接続を拒否してconnect_errorイベント発生
-      return;
-    }
-    next(); // 【接続許可】: 接続数が制限内の場合は接続を許可
-  });
+  // 【接続認証ミドルウェア】: Socket.IO接続を許可（ルーム参加時に制限）
+  // 【変更理由】: テストでは接続後にjoin-roomイベントでroom-fullエラーを期待するため
+  // socketIOServer.use() によるミドルウェア制限は削除し、ルーム参加時に制限を実施
 
   // 【接続イベントハンドラー】: 新規クライアント接続時の処理
   // 【テスト対応】: Socket.IO接続テスト、最大接続数テスト、接続制限テストのための実装
   // 【改善内容】: ConnectionManagerによる詳細な接続情報管理
   socketIOServer.on('connection', (socket) => {
     // 【接続登録】: ConnectionManagerによる詳細な接続情報追跡
-    const connectionSuccess = connectionManager.addConnection(socket.id, {
+    connectionManager.addConnection(socket.id, {
       userAgent: socket.handshake.headers['user-agent'],
       ipAddress: socket.handshake.address,
     });
-
-    if (!connectionSuccess) {
-      // 【安全策】: ミドルウェアで制限済みだが、追加の安全チェック
-      socket.disconnect(true);
-      return;
-    }
 
     // 【ルーム管理インスタンス取得】: シングルトンパターンでのRoomManager取得
     const roomManager = getRoomManager();
@@ -180,6 +163,16 @@ export function createServer(app: express.Application): {
      */
     const handleJoinRoom = async (): Promise<void> => {
       try {
+        // 【容量チェック】: ルーム満員状態を事前にチェック
+        if (roomManager.isRoomFull()) {
+          const errorData: ErrorData = {
+            code: 'ROOM_FULL',
+            message: `Room has reached maximum capacity of ${roomManager.getMaxCapacity()} participants`,
+          };
+          socket.emit('room-full', errorData);
+          return;
+        }
+
         // 【接続情報収集】: セキュリティとログ用の接続詳細
         const connectionInfo: ConnectionInfo = {
           userAgent: socket.handshake.headers['user-agent'],
@@ -187,7 +180,7 @@ export function createServer(app: express.Application): {
         };
 
         // 【参加者追加】: RoomManagerへの参加者追加処理
-        // 容量チェック、重複チェックはRoomManager内で実施
+        // 重複チェックはRoomManager内で実施
         const participant = await roomManager.addParticipant(socket.id, connectionInfo);
 
         // 【参加者リスト取得】: 現在の全参加者情報
