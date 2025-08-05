@@ -1,73 +1,84 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWebRTC } from './useWebRTC';
 import { useSocketConnection } from './useSocketConnection';
+import { ScreenShareEvent, ScreenShareError } from '../types';
 
 export interface UseScreenShareReturn {
   // 状態
   isSharing: boolean;
   isLoading: boolean;
-  sharingUserId: string | null;
+  sharingParticipantId: string | null;
   screenStream: MediaStream | null;
-  sharedScreenStream: MediaStream | null;
+  error: string | null;
 
   // 制御関数
   startScreenShare: () => Promise<void>;
   stopScreenShare: () => Promise<void>;
+  clearError: () => void;
 }
 
-// Generate a simple user ID for demo purposes
-const getCurrentUserId = () => 'current-user-' + Math.random().toString(36).substring(2, 11);
-
-export const useScreenShare = (): UseScreenShareReturn => {
+export const useScreenShare = (roomId: string | null = null, participantId: string | null = null): UseScreenShareReturn => {
   const { peers, localStream } = useWebRTC();
   const { connectionState } = useSocketConnection();
   const socket = connectionState.socket;
 
   const [isSharing, setIsSharing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const operationInProgressRef = useRef(false);
-  const [sharingUserId, setSharingUserId] = useState<string | null>(null);
+  const [sharingParticipantId, setSharingParticipantId] = useState<string | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
-  const [sharedScreenStream, setSharedScreenStream] = useState<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const currentUserIdRef = useRef(getCurrentUserId());
+  const operationInProgressRef = useRef(false);
   const originalVideoTracksRef = useRef<Map<string, MediaStreamTrack>>(new Map());
 
   // Socket.IO event listeners
   useEffect(() => {
     if (!socket) return;
 
-    const handleParticipantScreenShareStarted = (data: { userId: string }) => {
-      setSharingUserId(data.userId);
-      // In a real app, we would receive the shared screen stream here
-      // For now, we'll simulate it
-    };
-
-    const handleParticipantScreenShareStopped = (data: { userId: string }) => {
-      setSharingUserId((prev) => (prev === data.userId ? null : prev));
-      if (sharingUserId === data.userId) {
-        setSharedScreenStream(null);
+    const handleScreenShareStarted = (event: ScreenShareEvent) => {
+      console.log('Screen share started:', event);
+      setSharingParticipantId(event.participantId);
+      
+      // If this is our own screen share, update local state
+      if (event.participantId === participantId) {
+        setIsSharing(true);
       }
     };
 
-    const handleScreenShareRequestDenied = (data: {
-      reason: string;
-      currentSharingUserId: string;
-    }) => {
-      console.error('Screen share request denied:', data.reason);
-      // Could show user notification here
+    const handleScreenShareStopped = (event: ScreenShareEvent) => {
+      console.log('Screen share stopped:', event);
+      
+      // If this was our screen share or the currently sharing participant
+      if (event.participantId === participantId) {
+        setIsSharing(false);
+        if (screenStream) {
+          screenStream.getTracks().forEach(track => track.stop());
+          setScreenStream(null);
+        }
+      }
+      
+      if (sharingParticipantId === event.participantId) {
+        setSharingParticipantId(null);
+      }
     };
 
-    socket.on('participant-screen-share-started', handleParticipantScreenShareStarted);
-    socket.on('participant-screen-share-stopped', handleParticipantScreenShareStopped);
-    socket.on('screen-share-request-denied', handleScreenShareRequestDenied);
+    const handleScreenShareError = (error: ScreenShareError) => {
+      console.error('Screen share error:', error);
+      setError(error.message);
+      setIsLoading(false);
+      operationInProgressRef.current = false;
+    };
+
+    socket.on('screen-share-started', handleScreenShareStarted);
+    socket.on('screen-share-stopped', handleScreenShareStopped);
+    socket.on('screen-share-error', handleScreenShareError);
 
     return () => {
-      socket.off('participant-screen-share-started');
-      socket.off('participant-screen-share-stopped');
-      socket.off('screen-share-request-denied');
+      socket.off('screen-share-started', handleScreenShareStarted);
+      socket.off('screen-share-stopped', handleScreenShareStopped);
+      socket.off('screen-share-error', handleScreenShareError);
     };
-  }, [socket, sharingUserId]);
+  }, [socket, sharingParticipantId, participantId, screenStream]);
 
   // Store original video tracks for restoration
   const storeOriginalVideoTracks = useCallback(() => {
@@ -118,24 +129,30 @@ export const useScreenShare = (): UseScreenShareReturn => {
   }, [localStream, replaceVideoTracks]);
 
   const startScreenShare = useCallback(async (): Promise<void> => {
-    if (isLoading || operationInProgressRef.current) return;
+    if (isLoading || operationInProgressRef.current || !roomId || !participantId) {
+      return;
+    }
 
     // Check if someone else is already sharing
-    if (sharingUserId && sharingUserId !== currentUserIdRef.current) {
-      throw new Error(`Screen sharing is already active by user: ${sharingUserId}`);
+    if (sharingParticipantId && sharingParticipantId !== participantId) {
+      const errorMsg = `Screen sharing is already active by participant: ${sharingParticipantId}`;
+      setError(errorMsg);
+      throw new Error(errorMsg);
     }
 
     // Check if we're already sharing
     if (isSharing) return;
 
-    operationInProgressRef.current = true;
-
     // Check if getDisplayMedia is available
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      throw new Error('Screen sharing is not supported by this browser');
+      const errorMsg = 'Screen sharing is not supported by this browser';
+      setError(errorMsg);
+      throw new Error(errorMsg);
     }
 
+    operationInProgressRef.current = true;
     setIsLoading(true);
+    setError(null);
 
     try {
       // Get display media stream
@@ -164,73 +181,90 @@ export const useScreenShare = (): UseScreenShareReturn => {
 
       // Set up track ended listener for automatic cleanup
       screenVideoTrack.onended = () => {
-        // Directly update state without calling stopScreenShare to avoid recursion
-        setIsSharing(false);
-        setSharingUserId((prev) => (prev === currentUserIdRef.current ? null : prev));
-        setScreenStream(null);
+        // User stopped sharing through browser controls
+        stopScreenShare().catch(console.error);
       };
 
       // Replace video tracks in all peer connections
       await replaceVideoTracks(screenVideoTrack);
 
-      // Update state
+      // Update local state
       setScreenStream(displayStream);
-      setIsSharing(true);
-      setSharingUserId(currentUserIdRef.current);
 
-      // Notify other participants
+      // Send request to server
       if (socket && socket.connected) {
-        socket.emit('screen-share-started', {
-          userId: currentUserIdRef.current,
-          timestamp: Date.now(),
+        socket.emit('request-screen-share', {
+          roomId,
+          participantId,
         });
       }
     } catch (error) {
       console.error('Failed to start screen sharing:', error);
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          setError('Screen sharing permission was denied');
+        } else if (error.name === 'NotSupportedError') {
+          setError('Screen sharing is not supported by this browser');
+        } else {
+          setError(error.message);
+        }
+      } else {
+        setError('Failed to start screen sharing');
+      }
       throw error;
     } finally {
       setIsLoading(false);
       operationInProgressRef.current = false;
     }
-  }, [isLoading, sharingUserId, isSharing, storeOriginalVideoTracks, replaceVideoTracks, socket]);
+  }, [isLoading, sharingParticipantId, participantId, isSharing, roomId, storeOriginalVideoTracks, replaceVideoTracks, socket]);
 
   const stopScreenShare = useCallback(async (): Promise<void> => {
-    if (!isSharing || !screenStream || operationInProgressRef.current) return;
+    if (!isSharing || operationInProgressRef.current || !roomId || !participantId) {
+      return;
+    }
 
     operationInProgressRef.current = true;
     setIsLoading(true);
+    setError(null);
 
     try {
       // Stop all tracks in the screen stream
-      screenStream.getTracks().forEach((track) => {
-        track.stop();
-      });
+      if (screenStream) {
+        screenStream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
 
       // Restore original video tracks
       await restoreOriginalVideoTracks();
 
-      // Update state
-      setScreenStream(null);
-      setIsSharing(false);
-      if (sharingUserId === currentUserIdRef.current) {
-        setSharingUserId(null);
-      }
-
-      // Notify other participants
+      // Send stop request to server
       if (socket && socket.connected) {
-        socket.emit('screen-share-stopped', {
-          userId: currentUserIdRef.current,
-          timestamp: Date.now(),
+        socket.emit('stop-screen-share', {
+          roomId,
+          participantId,
         });
       }
+
+      // Update local state (will be confirmed by server response)
+      setScreenStream(null);
     } catch (error) {
       console.error('Failed to stop screen sharing:', error);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Failed to stop screen sharing');
+      }
       throw error;
     } finally {
       setIsLoading(false);
       operationInProgressRef.current = false;
     }
-  }, [isSharing, screenStream, restoreOriginalVideoTracks, sharingUserId, socket]);
+  }, [isSharing, screenStream, restoreOriginalVideoTracks, roomId, participantId, socket]);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -244,10 +278,11 @@ export const useScreenShare = (): UseScreenShareReturn => {
   return {
     isSharing,
     isLoading,
-    sharingUserId,
+    sharingParticipantId,
     screenStream,
-    sharedScreenStream,
+    error,
     startScreenShare,
     stopScreenShare,
+    clearError,
   };
 };

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { ExtendedRoomState, RoomContextValue, Participant } from '../types';
+import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import { ExtendedRoomState, RoomContextValue, Participant, ScreenShareEvent } from '../types';
 import { useSocketConnection } from '../hooks';
 
 // Initial state
@@ -166,6 +166,28 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(roomReducer, initialState);
   const socketConnection = useSocketConnection();
 
+  // Handle socket events for screen sharing
+  useEffect(() => {
+    const socket = socketConnection.connectionState.socket;
+    if (!socket) return;
+
+    const handleScreenShareStarted = (event: ScreenShareEvent) => {
+      dispatch({ type: 'SCREEN_SHARE_START', payload: { userId: event.participantId } });
+    };
+
+    const handleScreenShareStopped = (event: ScreenShareEvent) => {
+      dispatch({ type: 'SCREEN_SHARE_STOP', payload: { userId: event.participantId } });
+    };
+
+    socket.on('screen-share-started', handleScreenShareStarted);
+    socket.on('screen-share-stopped', handleScreenShareStopped);
+
+    return () => {
+      socket.off('screen-share-started', handleScreenShareStarted);
+      socket.off('screen-share-stopped', handleScreenShareStopped);
+    };
+  }, [socketConnection.connectionState.socket]);
+
   const actions = {
     joinRoom: useCallback((roomId: string, userName: string) => {
       dispatch({ type: 'CONNECT_START' });
@@ -226,6 +248,14 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({ children }) => {
 
     setCurrentUser: useCallback((user: Participant) => {
       dispatch({ type: 'SET_CURRENT_USER', payload: { user } });
+    }, []),
+
+    handleScreenShareStarted: useCallback((participantId: string) => {
+      dispatch({ type: 'SCREEN_SHARE_START', payload: { userId: participantId } });
+    }, []),
+
+    handleScreenShareStopped: useCallback((participantId: string) => {
+      dispatch({ type: 'SCREEN_SHARE_STOP', payload: { userId: participantId } });
     }, []),
   };
 

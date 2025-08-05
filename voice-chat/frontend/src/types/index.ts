@@ -89,6 +89,8 @@ export interface RoomContextValue {
     handleUserMuted: (userId: string, isMuted: boolean) => void;
     handleRoomJoined: (roomId: string, participants: Participant[]) => void;
     setCurrentUser: (user: Participant) => void;
+    handleScreenShareStarted: (participantId: string) => void;
+    handleScreenShareStopped: (participantId: string) => void;
   };
 }
 
@@ -116,4 +118,29 @@ export interface UserLeftData {
 export interface UserMutedData {
   userId: string;
   isMuted: boolean;
+}
+
+// Screen Share関連の型定義
+export interface ScreenShareRequest {
+  roomId: string;
+  participantId: string;
+}
+
+export interface ScreenShareEvent {
+  roomId: string;
+  participantId: string;
+  isSharing: boolean;
+}
+
+export interface ScreenShareError {
+  error: string;
+  message: string;
+}
+
+export interface ScreenShareState {
+  isSharing: boolean;
+  sharingParticipantId: string | null;
+  screenStream: MediaStream | null;
+  isLoading: boolean;
+  error: string | null;
 }
